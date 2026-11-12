@@ -1,6 +1,6 @@
 """
 scaler.py - Chia train/val và chuẩn hóa dữ liệu cho TẤT CẢ các mô hình,
-gồm CNN, Naive Bayes, Perceptron, Logistic Regression, SVM, KNN, cây quyết định.
+gồm CNN, Naive Bayes, Perceptron, MLP, Logistic Regression.
 
 Mọi thống kê (mean, std, scaler, pixel chết) chỉ tính trên TRAIN,
 rồi áp dụng cho val và test để không bị rò rỉ dữ liệu.
@@ -11,12 +11,11 @@ Cách dùng:
 
 kind:
     "cnn"      : ảnh (N,1,28,28) hoặc (N,28,28,1), chuẩn hóa (x-mean)/std
-    "raw"      : vector [0,1]           -> GaussianNB, MultinomialNB, cây quyết định
-    "binary"   : vector 0/1             -> BernoulliNB
-    "standard" : vector mean 0, std 1   -> Perceptron, Logistic Regression, SVM tuyến tính
+    "raw"      : vector [0,1]           -> GaussianNB
+    "standard" : vector mean 0, std 1   -> Perceptron, MLP, Logistic Regression
 """
 import numpy as np
-from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 from src.preprocessing.image_preprocessing import augment_shift
@@ -67,7 +66,7 @@ def scale_cnn(X_train, X_val, X_test, channels_last=True):
 def scale_flat(X_train, X_val, X_test, mode="raw"):
 
     # Flat preprocessing does not support CNN image layouts.
-    valid_modes = {"raw", "binary", "standard"}
+    valid_modes = {"raw", "standard"}
 
     if mode not in valid_modes:
         raise ValueError(
@@ -80,12 +79,7 @@ def scale_flat(X_train, X_val, X_test, mode="raw"):
 
     
     tools = {}
-    if mode == "binary":
-        X_train_ = (X_train_ >= 0.5).astype("float32")
-        X_val_ = (X_val_ >= 0.5).astype("float32")
-        X_test_ = (X_test_ >= 0.5).astype("float32")
-
-    elif mode == "standard":
+    if mode == "standard":
         # 1. Tính mean và std CHỈ TRÊN TẬP TRAIN (tránh data leakage)
         # .mean() và .std() không truyền axis sẽ tính trên toàn bộ array -> ra 1 số vô hướng (scalar)
         mean = X_train_.mean() 
@@ -110,59 +104,19 @@ def scale_flat(X_train, X_val, X_test, mode="raw"):
 
 
 # ---------------------------------------------------------------- #
-# Cross-validation dùng cho tuning hyperparameter
-# ---------------------------------------------------------------- #
-def iter_kfold(X, y, n_splits=5, seed=42, mode="raw"):
-    """Yield các fold train/val đã qua tiền xử lý kiểu ``mode``."""
-
-    # Flat preprocessing does not support CNN image layouts.
-    valid_modes = {"raw", "binary", "standard"}
-
-    if mode not in valid_modes:
-        raise ValueError(
-            f"Unknown mode: {mode!r}. Expected one of {sorted(valid_modes)}."
-        )
-
-
-    X = np.asarray(X)
-    y = np.asarray(y)
-
-    if n_splits < 2:
-        raise ValueError("n_splits phải >= 2")
-    if len(X) != len(y):
-        raise ValueError("X và y phải có cùng số mẫu")
-
-    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
-    for train_idx, val_idx in skf.split(X, y):
-        X_train_fold, X_val_fold = X[train_idx], X[val_idx]
-        y_train_fold, y_val_fold = y[train_idx], y[val_idx]
-
-        X_train_fold, X_val_fold, _, _ = scale_flat(
-            X_train_fold, X_val_fold, X_val_fold, mode=mode
-        )
-
-        yield {
-            "X_train": X_train_fold,
-            "y_train": y_train_fold,
-            "X_val": X_val_fold,
-            "y_val": y_val_fold,
-        }
-
-
-# ---------------------------------------------------------------- #
 # Hàm tổng hợp
 # ---------------------------------------------------------------- #
 def prepare(kind, X_train, y_train, X_test, y_test, val_size=0.1,
             augment=False, channels_last=True):
     """
-    kind: "cnn", "raw", "binary", "standard"
+    kind: "cnn", "raw", "standard"
     X_train, X_test: ảnh gốc (N, 28, 28) uint8.
     augment: chỉ dùng cho "cnn", tăng cường train bằng ảnh dịch.
     Trả về dict: X_train, y_train, X_val, y_val, X_test, y_test, tools.
     """
 
     # Reject unsupported preprocessing modes before splitting data.
-    valid_kinds = {"cnn", "raw", "binary", "standard"}
+    valid_kinds = {"cnn", "raw", "standard"}
 
     if kind not in valid_kinds:
         raise ValueError(

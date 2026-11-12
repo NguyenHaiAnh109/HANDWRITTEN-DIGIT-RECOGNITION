@@ -8,9 +8,6 @@ import numpy as np
 from PIL import Image, ImageOps
 
 
-
-
-
 def remove_duplicates(X, y):
     """
     Bỏ các ảnh trùng lặp hoàn toàn (giống nhau từng pixel), giữ lại bản đầu tiên.
@@ -48,6 +45,7 @@ def clean_images(X, y):
     return X, y
 
 
+
 def augment_shift(X, y, max_shift=2, seed=42):
     """
     Tăng cường dữ liệu: dịch mỗi ảnh ngẫu nhiên tối đa max_shift pixel.
@@ -61,3 +59,5 @@ def augment_shift(X, y, max_shift=2, seed=42):
         dx = rng.randint(-max_shift, max_shift + 1)
         X_new[i] = np.roll(X_new[i], shift=(dy, dx), axis=(0, 1))
     return np.concatenate([X, X_new]), np.concatenate([y, y])
+
+
